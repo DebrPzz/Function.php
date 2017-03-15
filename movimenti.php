@@ -1,5 +1,7 @@
 <?php 
 	$msg='';
+	$fromm = (empty($_POST['fromm'])) ? date('Y-01-01') : $_POST['fromm']; 
+	$to = (empty($_POST['to'])) ? date('Y-m-d') : $_POST['to'];   
 	$u = (!empty($_REQUEST['upd'])) ? intval($_REQUEST['upd']) : false;
 	if ($u) $movimento=R::load('movimenti', $u);
 	if (!empty($_REQUEST['importo'])) : 
@@ -23,11 +25,9 @@
 			$msg=$e->getMessage();
 		}
 	endif;
-	
-	$movimenti=R::findAll('movimenti', 'ORDER by id ASC LIMIT 999');
+	$movimenti = R::find('movimenti', 'datamovimento BETWEEN "' . $fromm . '" AND "' . $to . '" ORDER by id ASC LIMIT 999');
 	$categorie=R::findAll('categorie');
-
-	
+	$tot=R::getCell('select SUM(importo) from movimenti');
 ?>
 <div class="container">
 <h1>
@@ -36,20 +36,22 @@
 </div>
 <h4 class="msg"><?=$msg?></h4>
 <div class="container">
-<table border="0" cellspacing="5" cellpadding="5">
-            <tbody><tr>
-                    <td><b>Filtra il periodo</b></td></tr>
-                <tr><td>DATA Inizio:</td>
-                    <td><input type="date" id="dal" name="dal"></td>
-                </tr>
-                <tr>
-                    <td>DATA Fine:</td>
-                    <td><input type="date" id="al" name="al"></td>
-                </tr>
-            </tbody></table>
+<h4>Seleziona un periodo di tempo:</h4>
+<form method="post" action="?p=movimenti">
+            <label for="da">
+            From 
+        </label>
+        <input name="fromm" type="date"  value="<?= $fromm ?>"   />
+        <label for="a">
+            To
+        </label>
+        <input name="to"  type="date" value="<?= $to ?>"   />
+
+        <button type="submit" tabindex="-1" class="btn-primary">
+            Filtra
+        </button>
+		</form>
         </br>
-
-
 	<div class="table-responsive">
 	<table class="table" id="move">
 		<colgroup>
@@ -60,7 +62,7 @@
 				<th>Data</th>
 				<th>Descrizione</th>
 				<th>Categoria</th>
-				<th>Importo</th>
+				<th>Importo in €</th>
 				<th style="width:60px;text-align:center">Modifica</th>
 				<th style="width:60px;text-align:center">Cancella</th>
 			</tr>
@@ -84,7 +86,7 @@
 					</select>
 				</td>
 				<td>
-					<input name="importo" type="number" step="any" value="<?=$r->importo?>" onchange="chg(this)"  style="text-align:right" />
+					<input name="importo" type="number" step="any" value="<?=$r->importo?>" onchange="chg(this)"  style="text-align:right" /> 
 				</td>
 				<td>
 					<form id="frm" method="POST" action="?p=movimenti">
@@ -141,11 +143,10 @@
 				<td colspan="6"></td>
 				</tr>
 			</tfoot>
-		
 	</table>
 	</div>
 	<br/>
-	<div  style="border: solid 1px #ccc; border-radius: 25px; padding:1em; padding-bottom:0px; padding-top:0px; margin-bottom:1em;"  class="container">
+	<div  style="border: solid 1px #ccc; border-radius: 25px; padding:1em; padding-bottom:0px; padding-top:0px; margin-bottom:1em;"  class="container bg-success">
 	<div class="form-group">
 	<h4 style="text-align:center;"><strong>Inserisci una nuova voce di spesa</strong></h4>
 		<? if (!$u) : ?>
@@ -168,7 +169,7 @@
 		</div>
 		<div class="col-md-3">	
 		<label for="importo">
-				Importo €
+				Importo in €
 			</label>
 		<input name="importo" placeholder="00.00" class="form-control" type="numer" step="any" value="" onchange="chg(this)" />
 		</div>
@@ -190,9 +191,11 @@
 			
 			<br/>
 			
+			<div style="text-align:center;">
 			<button type="submit" class="btn btn-success"style="margin-top:1em; width:30%;">
 				Salva
 			</button>
+			</div>
 		</form>
 		<? endif; ?>
 	</div>
@@ -208,15 +211,13 @@
 	}	
 </script>
 
-
-
 <script>
 	$(document).ready(function() {
     $('#move').DataTable( {
         "footerCallback": function ( row, data, start, end, display ) {
             var api = this.api(), data;
  
-            // Remove the formatting to get integer data for summation
+            
             var intVal = function ( i ) {
                 return typeof i === 'string' ?
                     i.replace(/[\$,]/g, '')*1 :
@@ -224,58 +225,29 @@
                         i : 0;
             };
 			
-		
-			 // Total over all pages
                 total = api
                         .column(3)
                         .data()
                         .reduce(function (a, b) {
                             return intVal(a) + intVal(b);
                         }, 0);
-                // Total over this page
+                
+				
                 pageTotal = api
                         .column(3, {page: 'current'})
                         .data()
                         .reduce(function (a, b) {
                             return intVal(a) + intVal(b);
                         }, 0);
-                // Update footer
+                
                 $(api.column(3).footer()).html(
-                        'Uscite in relazione al periodo selezionato: € '  + pageTotal + '<br/> Totale uscite: € ' + total
+                        '<strong>Totale uscite relative alla selezione: '  + pageTotal + ' € <br/> Totale uscite: <?= 0-($tot);?> €</strong></p>'
                         );
             }
         });
-		
-		
-			/*FILTRO DATA */
-		
-        $.fn.dataTable.ext.search.push(
-                function (settings, data, dataIndex) {
-                    var dal = parseInt($('#dal').val(), 10);
-                    var al = parseInt($('#al').val(), 10);
-                    var age = parseFloat(data[1]) || 0; // use data for the age column
-                    if ((isNaN(dal) && isNaN(al)) ||
-                            (isNaN(dal) && age <= al) ||
-                            (dal <= age && isNaN(al)) ||
-                            (dal <= age && age <= al))
-                    {
-                        return true;
-                    }
-                    return false;
-                }
-        );
-		
-		
-		
-		// script per plugin datatable
         $(document).ready(function () {
             var table = $('#move').DataTable();
 				
-			
-            // Event listener to the two range filtering inputs to redraw on input
-            $('#dal, #al').keyup(function () {
-                table.draw();
-            });
         });
     });
 	
